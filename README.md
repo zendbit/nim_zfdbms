@@ -3,19 +3,16 @@ https://github.com/zendbit/nim.zfcore
 
 #### install
 ```
-nimble install zfplugs@#head
+nimble install zfdbms
+```
+
+#### direct install
+```
+https://github.com/zendbit/nim.zfdbms.git
 ```
 
 #### usage
 available plugins
 ```
-zfplugs/auth
-zfplugs/csrf
-zfplugs/dbs
-zfplugs/dbms
-zfplugs/dbssql
-zfplugs/layout
-zfplugs/paging
-zfplugs/settings
-zfplugs/session 
+import zfdbms/dbms
 ```
