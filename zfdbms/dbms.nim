@@ -1251,7 +1251,7 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
     dbmsFieldTypes: seq[seq[DbmsFieldType]],
     fields: seq[string],
     query: Sql = Sql(),
-    fieldDelimiter: string = "_"): RowResults[JsonNode] =
+    fieldDelimiter: string = "."): RowResults[JsonNode] =
     ##
     ##  select multi row result from table with given objects,
     ##  the selectJoin is for join table
