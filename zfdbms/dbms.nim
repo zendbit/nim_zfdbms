@@ -7,9 +7,7 @@
 ##  Git: https://github.com/zendbit/nim.zfdbms
 ##
 
-const WITH_MYSQL* = defined(mysqldb) or defined(nimdoc)
-const WITH_PGSQL* = defined(pgsqldb) or defined(nimdoc)
-const WITH_SQLITE* = defined(sqlitedb) or defined(nimdoc)
+import dbs
 
 const FK_NOACTION* = "NO ACTION"
 const FK_RESTRICT* = "RESTRICT"
