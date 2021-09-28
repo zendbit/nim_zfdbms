@@ -23,7 +23,7 @@ nim c -d:mysqldb myapp.nim
 ```
 
 #### usage
-```
+```nim
 # 
 # console app example
 # database engine: mysql
