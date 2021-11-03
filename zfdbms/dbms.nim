@@ -50,12 +50,12 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
 
     InsertIdResult* = tuple[
       ok: bool,
-      insertId: uint64,
+      insertId: int64,
       msg: string]
 
     UpdateResult* = tuple[
       ok: bool,
-      affected: uint64,
+      affected: int64,
       msg: string]
     
     ExecResult* = tuple[
@@ -69,7 +69,7 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
     
     CountResult* = tuple[
       ok: bool,
-      val: uint64,
+      val: int64,
       msg: string]
 
     RowResults*[T] = tuple[
@@ -120,7 +120,7 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
       foreignKeyRef*: string
       name*: string
       isUnique*: bool
-      length*: uint64
+      length*: int64
       dataType*: DbmsDataType
       foreignKeyOnUpdate*: string
       foreignKeyOnDelete*: string
@@ -189,7 +189,7 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
     name: string = "",
     isPrimaryKey: bool = false,
     isNull: bool = true,
-    length: uint64 = 0,
+    length: int64 = 0,
     isUnique: bool = false,
     isMultipleUnique: bool = false,
     dataType: DbmsDataType = VARCHAR,
@@ -425,7 +425,7 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
       echo dbmsQuote(q)
       result = (false, ex.msg)
       
-  proc extractQueryResults*(fields: seq[JFieldDesc], queryResults: seq[string], fieldDelimiter: string = "_"): JsonNode {.gcsafe.} =
+  proc extractQueryResults*(fields: seq[JFieldDesc], queryResults: seq[string], fieldDelimiter: string = "."): JsonNode {.gcsafe.} =
     result = %*{}
     if queryResults.len > 0 and queryResults[0] != "" and queryResults.len == fields.len:
       for i in 0..fields.high:
@@ -433,6 +433,22 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
           var fprops = k.split(" AS ")
           result[fprops[fprops.high].strip.replace(".", fieldDelimiter)] = v
 
+  proc extractFieldsAlias*[T: JFieldDesc | JFieldPair](fields: seq[T]): seq[T] {.gcsafe.} =
+    let fields = fields.map(proc (x: T): T =
+      when T is JFieldDesc:
+        (x.name.replace("-as-", " AS ").replace("-AS-", " AS "), x.nodeKind)
+      else:
+        (x.name.replace("-as-", " AS ").replace("-AS-", " AS "), x.val, x.nodeKind)
+      )
+
+  proc normalizeFieldsAlias*[T: JFieldDesc | JFieldPair](fields: seq[T]): seq[T] {.gcsafe.} =
+    return fields.extractFieldsAlias.map(proc (x: T): T =
+      when T is JFieldDesc:
+        (x.name.split(" AS ")[0].strip, x.nodeKind)
+      else:
+        (x.name.split(" AS ")[0].strip, x.val, x.nodeKind)
+      )
+  
   proc getCount*(
     self: DBMS,
     query: Sql): CountResult {.gcsafe.} =
@@ -447,7 +463,7 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
     ##
     try:
       if not self.connected:
-        result = (false, 0.uint64, "can't connect to the database.")
+        result = (false, 0.int64, "can't connect to the database.")
       else:
         let queryResults = self.conn.getRow(sql dbmsQuote(query))
         let countResult = tryParseBiggestUInt(queryResults[0])
@@ -455,13 +471,13 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
     except Exception as ex:
       echo &"{ex.msg}, {query.toQs}"
       echo dbmsQuote(query)
-      result = (false, 0.uint64, ex.msg)
+      result = (false, 0.int64, ex.msg)
 
   proc getRow*[T](
     self: DBMS,
     obj: T,
     query: Sql,
-    fieldDelimiter: string = "_"): RowResult[T] {.gcsafe.} =
+    fieldDelimiter: string = "."): RowResult[T] {.gcsafe.} =
     ##
     ##  get row from database will return RowResult
     ##
@@ -491,7 +507,7 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
     table: string,
     obj: T,
     query: Sql,
-    fieldDelimiter: string = "_"): RowResult[T] {.gcsafe.} =
+    fieldDelimiter: string = "."): RowResult[T] {.gcsafe.} =
     ##
     ##  get row result from database and return RowResult
     ##
@@ -525,7 +541,7 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
     self: DBMS,
     obj: T,
     query: Sql,
-    fieldDelimiter: string = "_"): RowResults[T] {.gcsafe.} =
+    fieldDelimiter: string = "."): RowResults[T] {.gcsafe.} =
     ##
     ##  get multiple rows from database will return RowResults
     ##
@@ -559,7 +575,7 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
     table: string,
     obj: T,
     query: Sql,
-    fieldDelimiter: string = "_"): RowResults[T] {.gcsafe.} =
+    fieldDelimiter: string = "."): RowResults[T] {.gcsafe.} =
     ##
     ##  get multiple rows from database will return RowResults
     ##
@@ -573,12 +589,12 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
       if not self.connected:
         result = (false, @[], "can't connect to the database.")
       else:
-        let fields = obj.fieldsDesc
+        let fields = obj.fieldDesc
         q = (Sql()
           .select(fields.map(proc(x: JFieldDesc): string = x.name))
           .fromTable(table) & query)
 
-        let queryResults = self.conn.getRows(sql dbmsQuote(q))
+        let queryResults = self.conn.getAllRows(sql dbmsQuote(q))
         var res: seq[T] = @[]
         if queryResults.len > 0 and queryResults[0][0] != "":
           for qres in queryResults:
@@ -728,7 +744,17 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
     ##
     ##  convert object to qeuery syntanx default is AND operator
     ##
-    result = (%obj).toWhereQuery(tablePrefix, op)
+    var query: seq[string]
+    var qParams: seq[JFieldItem]
+    let jObj = %obj
+    for k, v in jObj:
+      var stmt = &"{k}=?"
+      if query.len < jObj.len - 1:
+        stmt = &"{stmt} {op}"
+
+      query.add(stmt)
+
+    result = (query.join(" ").strip, qParams)
 
   proc getDbType(dbms: DBMS): DbmsType =
     ##
@@ -1101,7 +1127,7 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
             dbmsFieldType.isNull = dbmsFieldPragma.isNull
             dbmsFieldType.isPrimaryKey = dbmsFieldPragma.isPrimaryKey
             dbmsFieldType.isUnique = dbmsFieldPragma.isUnique
-            dbmsFieldType.length = dbmsFieldPragma.length.uint64
+            dbmsFieldType.length = dbmsFieldPragma.length.int64
             dbmsFieldType.dataType = dbmsFieldPragma.dataType
             dbmsFieldType.timeFormat = dbmsFieldPragma.timeFormat
             dbmsFieldType.dateFormat = dbmsFieldPragma.dateFormat
@@ -1293,7 +1319,7 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
     dbmsFieldTypes: seq[seq[DbmsFieldType]],
     fields: seq[string] = @[],
     query: Sql = Sql(),
-    fieldDelimiter: string = "_"): RowResult[JsonNode] =
+    fieldDelimiter: string = "."): RowResult[JsonNode] =
     ##
     ##  select single row result from table with given objects,
     ##  the selectJoin is for join table
