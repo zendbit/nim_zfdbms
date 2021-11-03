@@ -1,5 +1,5 @@
-### zfplugs is plugins for the zfcore framework
-https://github.com/zendbit/nim.zfcore
+### zfdbms simple dbms generator, connector and query tools
+https://github.com/zendbit/nim.zfdbms
 
 #### install
 ```
