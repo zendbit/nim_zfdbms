@@ -6,6 +6,7 @@
 ##  Email: amru.rosyada@gmail.com
 ##  Git: https://github.com/zendbit/nim.zfplugs
 ##
+##
 
 const WITH_MYSQL* = defined(mysqldb) or defined(nimdoc)
 const WITH_PGSQL* = defined(pgsqldb) or defined(nimdoc)
