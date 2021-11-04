@@ -6,5 +6,5 @@ license     = "BSD"
 
 # Deps
 requires "nim >= 1.4.0"
-requires "stdext >= 0.0.10"
+requires "stdext >= 0.0.11"
 
