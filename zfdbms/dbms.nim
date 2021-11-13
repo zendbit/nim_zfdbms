@@ -467,7 +467,7 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
         result = (false, 0.int64, "can't connect to the database.")
       else:
         let queryResults = self.conn.getRow(sql dbmsQuote(query))
-        let countResult = tryParseBiggestUInt(queryResults[0])
+        let countResult = tryParseBiggestInt(queryResults[0])
         result = (countResult.ok, countResult.val, "ok")
     except Exception as ex:
       echo &"{ex.msg}, {query.toQs}"
@@ -741,21 +741,31 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
   proc toWhereQuery*[T](
     obj: T,
     tablePrefix: string = "",
-    op: string = "AND"): tuple[where: string, params: seq[JFieldItem]] =
+    op: string = "AND"): tuple[where: string, params: seq[JsonNode]] =
     ##
     ##  convert object to qeuery syntanx default is AND operator
     ##
     var query: seq[string]
-    var qParams: seq[JFieldItem]
+    var qParams: seq[JsonNode]
     let jObj = %obj
     for k, v in jObj:
-      var stmt = &"{k}=?"
-      if query.len < jObj.len - 1:
-        stmt = &"{stmt} {op}"
+      if v.kind in [JString, JInt, JFloat]:
+        if tablePrefix != "":
+          query.add(&"{tablePrefix}.{k}=?")
+        else:
+          query.add(&"{k}=?")
 
-      query.add(stmt)
+        case v.kind
+        of JString:
+          qParams.add(v)
+        of JInt:
+          qParams.add(v)
+        of JFloat:
+          qParams.add(v)
+        else:
+          discard
 
-    result = (query.join(" ").strip, qParams)
+    result = (query.join(&" {op} ").strip, qParams)
 
   proc getDbType(dbms: DBMS): DbmsType =
     ##
@@ -1175,12 +1185,14 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
       raise newException(ObjectConversionDefect, "object definition not contain pragma {.dbmsTable(table_name).}.")
 
   proc stmtTranslator[T1, T2](
-    tbl1: T1,
-    tbl2: T2,
+    obj1: typedesc[T1],
+    obj2: typedesc[T2],
     stmtType: DbmsStmtType): Sql =
     ##
     ## join statement generator
     ##
+    let tbl1 = obj1()
+    let tbl2 = obj2()
     var fieldListTbl1: seq[DbmsFieldType] = @[]
     var fieldListTbl2: seq[DbmsFieldType] = @[]
 
@@ -1274,15 +1286,16 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
   proc select*(
     dbms: DBMS,
     dbmsFieldTypes: seq[seq[DbmsFieldType]],
-    fields: seq[string],
+    fields: seq[string] = @[],
     query: Sql = Sql(),
+    exceptFields: seq[string] = @[],
     fieldDelimiter: string = "."): RowResults[JsonNode] =
     ##
     ##  select multi row result from table with given objects,
     ##  the selectJoin is for join table
     ##
     ##  let r = dbConn(Sinacc)
-    ##    .selectJoin(
+    ##    .select(
     ##      [%@NetworkNas(), %@StatusType(), %@StateType()],
     ##      NetworkNas().innerJoin(StatusType())&
     ##      NetworkNas().innerJoin(StateType())&
@@ -1308,7 +1321,7 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
     ##
     ##  select single row result from table with given object
     ##
-    ##  let r = db.select(Users(id: some 100))
+    ##  let r = db.selectOne(Users(id: some 100))
     ##  if r.ok:
     ##    echo r.row
     ##  echo r.msg
@@ -1320,13 +1333,14 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
     dbmsFieldTypes: seq[seq[DbmsFieldType]],
     fields: seq[string] = @[],
     query: Sql = Sql(),
+    exceptFields: seq[string] = @[],
     fieldDelimiter: string = "."): RowResult[JsonNode] =
     ##
     ##  select single row result from table with given objects,
     ##  the selectJoin is for join table
     ##
     ##  let r = dbConn(Sinacc)
-    ##    .selectOneJoin(
+    ##    .selectOne(
     ##      [%@NetworkNas(), %@StatusType(), %@StateType()],
     ##      NetworkNas().innerJoin(StatusType())&
     ##      NetworkNas().innerJoin(StateType())&
@@ -1346,8 +1360,8 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
     result = dbms.getRow(%dbmsField, dbms.getDbType.stmtTranslator(%dbmsField, MULTI_SELECT, query), fieldDelimiter)
 
   proc innerJoin*[T1, T2](
-    tbl1: T1,
-    tbl2: T2): Sql =
+    tbl1: typedesc[T1],
+    tbl2: typedesc[T2]): Sql =
     ##
     ##  inner join two object will return Sql object
     ##
@@ -1358,8 +1372,8 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
     result = stmtTranslator(tbl1, tbl2, INNERJOIN)
 
   proc leftJoin*[T1, T2](
-    tbl1: T1,
-    tbl2: T2): Sql =
+    tbl1: typedesc[T1],
+    tbl2: typedesc[T2]): Sql =
     ##
     ##  inner join two object will return Sql object
     ##
@@ -1370,8 +1384,8 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
     result = stmtTranslator(tbl1, tbl2, LEFTJOIN)
 
   proc rightJoin*[T1, T2](
-    tbl1: T1,
-    tbl2: T2): Sql =
+    tbl1: typedesc[T1],
+    tbl2: typedesc[T2]): Sql =
     ##
     ##  inner join two object will return Sql object
     ##
@@ -1452,8 +1466,20 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
     ##
     result = dbms.execAffectedRows(dbms.getDbType.stmtTranslator(t, DELETE, query))
 
-  proc `%@`*[T: object|ref object](t: T): seq[DbmsFieldType] =
-    when t is object:
-      result = t.validatePragma()
+  proc `%@`*[T](t: typedesc[T]): seq[DbmsFieldType] =
+    let obj = t()
+    when obj is object:
+      result = obj.validatePragma()
     else:
-      result = t[].validatePragma()
+      result = obj[].validatePragma()
+
+  proc toDbmsTable*[T](jnode: JsonNode, t: typedesc[T], delimiter: string = "."): T =
+    let node = newJObject()
+    for k, v in jnode:
+      let field = k.split(".")
+      if field.len > 1:
+        node[field[1]] = v
+      else:
+        node[k] = v
+
+    result = node.to(t)
