@@ -346,11 +346,15 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
         result = (false, 0'i64, "can't connect to the database.")
       else:
         let kv = self.extractKeyValue(obj)
-        #var fieldItems: seq[JFieldItem] = @[]
         var fieldItems: seq[JsonNode] = @[]
         for i in 0..kv.keys.high:
-          #fieldItems.add((kv.values[i], kv.nodesKind[i]))
-          fieldItems.add(%i)
+          case kv.nodesKind[i]
+          of JInt:
+            fieldItems.add(%kv.values[i].tryParseBiggestUInt(0).val)
+          of JFloat:
+            fieldItems.add(%kv.values[i].tryParseBiggestFloat(0f).val)
+          else:
+            fieldItems.add(%kv.values[i])
 
         q = Sql()
           .insert(table, kv.keys)
@@ -384,11 +388,15 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
         result = (false, 0'i64, "can't connect to the database.")
       else:
         let kv = self.extractKeyValue(obj)
-        #var fieldItems: seq[JFieldItem] = @[]
         var fieldItems: seq[JsonNode] = @[]
         for i in 0..kv.keys.high:
-          #fieldItems.add((kv.values[i], kv.nodesKind[i]))
-          fieldItems.add(%i)
+          case kv.nodesKind[i]
+          of JInt:
+            fieldItems.add(%kv.values[i].tryParseBiggestUInt(0).val)
+          of JFloat:
+            fieldItems.add(%kv.values[i].tryParseBiggestFloat(0f).val)
+          else:
+            fieldItems.add(%kv.values[i])
 
         q = Sql()
           .update(table, kv.keys)
@@ -554,13 +562,16 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
     try:
       if not self.connected:
         result = (false, @[], "can't connect to the database.")
+      
       else:
         var fields: seq[JFieldDesc]
         when obj is JsonNode:
           fields = obj.dbmsJsonFieldDesc
         else:
           fields = obj.fieldDesc
+        
         let queryResults = self.conn.getAllRows(sql dbmsQuote(query))
+        
         var res: seq[T] = @[]
         if queryResults.len > 0 and queryResults[0][0] != "":
           for qres in queryResults:
