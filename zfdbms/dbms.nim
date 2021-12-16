@@ -9,6 +9,7 @@
 ##
 
 import dbs
+import std/tables
 
 const FK_NOACTION* = "NO ACTION"
 const FK_RESTRICT* = "RESTRICT"
@@ -121,16 +122,18 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
       foreignKeyRef*: string
       name*: string
       isUnique*: bool
+      useIndex*: bool
       length*: int64
       dataType*: DbmsDataType
       foreignKeyOnUpdate*: string
       foreignKeyOnDelete*: string
-      foreignKeyColumnRef*: string
+      foreignKeyFieldRef*: string
       tableName*: string
       timeFormat*: string
       dateFormat*: string
       timestampFormat*: string
-      isMultipleUnique: bool
+      uniqueKeyName*: string
+      indexName*: string
 
   ##
   ##  dbmsTable pragma this is for type definition
@@ -174,7 +177,7 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
   ##          dataType = BIGINT,
   ##          isNull = false)
   ##          dbmsForeignKeyRef: Users
-  ##          dbmsForeignKeyColumnRef: Users.id.}: Option[int]
+  ##          dbmsForeignKeyFieldRef: Users.id.}: Option[int]
   ##
   ##
 
@@ -188,21 +191,22 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
   template dbmsTable*(name: string = "") {.pragma.}
   template dbmsField*(
     name: string = "",
-    isPrimaryKey: bool = false,
     isNull: bool = true,
     length: int64 = 0,
-    isUnique: bool = false,
-    isMultipleUnique: bool = false,
     dataType: DbmsDataType = VARCHAR,
     timeFormat: string = "HH:mm:ss",
     dateFormat: string = "YYYY-MM-dd",
     timestampFormat: string = "YYYY-MM-dd HH:mm:ss") {.pragma.}
   template dbmsForeignKeyRef*(foreignKeyRef: typed) {.pragma.}
-  template dbmsForeignKeyColumnRef*(foreignKeyColumnRef: typed) {.pragma.}
+  template dbmsForeignKeyFieldRef*(foreignKeyFieldRef: typed) {.pragma.}
   template dbmsForeignKeyConstraint*(
     onDelete: string = FK_CASCADE,
-    onUpdate: string = FK_CASCADE,
-    columnRef: string = "") {.pragma.}
+    onUpdate: string = FK_CASCADE) {.pragma.}
+  template dbmsCompositeUniqueKey*(keyName: string) {.pragma.}
+  template dbmsUniqueKey*() {.pragma.}
+  template dbmsCompositeIndex*(indexName: string) {.pragma.}
+  template dbmsIndex*() {.pragma.}
+  template dbmsPrimaryKey*() {.pragma.}
 
   proc newDBMS*[T](
     database: string,
@@ -799,7 +803,8 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
     var primaryKey: seq[string] = @[]
     var foreignKey: seq[string] = @[]
     var tableName: string
-    var uniqueKey: seq[string] = @[]
+    var uniqueKey: Table[string, seq[string]] = initTable[string, seq[string]]()
+    var indexKey: Table[string, seq[string]] = initTable[string, seq[string]]()
     
     for f in fieldList:
       var column: seq[string] = @[]
@@ -882,7 +887,7 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
           column.add("UNIQUE")
 
       if f.foreignKeyRef != "":
-        var fkColRef = f.foreignKeyColumnRef
+        var fkColRef = f.foreignKeyFieldRef
         if fkColRef == "":
           fkColRef = "id"
 
@@ -896,16 +901,34 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
 
         foreignKey.add(&"""FOREIGN KEY ({columnName}) REFERENCES {f.foreignKeyRef}({fkColRef}) {onUpdate} {onDelete}""")
 
+        if f.useIndex:
+          if not indexKey.hasKey(f.indexName):
+            indexKey["default"] = @[]
+          indexKey["default"].add(columnName)
+
       columns.add(column.join(" "))
 
-      if f.isMultipleUnique:
-        uniqueKey.add(columnName)
+      if f.uniqueKeyName != "":
+        if not uniqueKey.hasKey(f.uniqueKeyName):
+          uniqueKey[f.uniqueKeyName] = @[]
+        uniqueKey[f.uniqueKeyName].add(columnName)
+      
+      if f.indexName != "":
+        if not indexKey.hasKey(f.indexName):
+          indexKey[f.indexName] = @[]
+        indexKey[f.indexName].add(columnName)
 
     if primaryKey.len != 0:
       columns.add(&"""PRIMARY KEY({primaryKey.join(", ")})""")
 
-    if uniqueKey.len > 0:
-      columns.add(&"""UNIQUE KEY({uniqueKey.join(", ")})""")
+    for k, v in uniqueKey:
+      columns.add(&"""CONSTRAINT {k} UNIQUE ({v.join(", ")})""")
+    
+    for k, v in indexKey:
+      if k != "default":
+        columns.add(&"""INDEX {k} ({v.join(", ")})""")
+      else:
+        columns.add(&"""INDEX ({v.join(", ")})""")
 
     if foreignKey.len != 0:
       columns &= foreignKey
@@ -1099,9 +1122,9 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
         fieldName = f.field.name
       fields.add(&"{f.tableName}.{fieldName}")
 
-      if f.foreignKeyColumnRef != "" and
+      if f.foreignKeyFieldRef != "" and
         f.foreignKeyRef in tableName:
-        joinPair.add(&"{f.tableName}.{fieldName}={f.foreignKeyRef}.{f.foreignKeyColumnRef}")
+        joinPair.add(&"{f.tableName}.{fieldName}={f.foreignKeyRef}.{f.foreignKeyFieldRef}")
 
     # get second tablename
     for f in fieldListTbl2:
@@ -1110,9 +1133,9 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
         fieldName = f.field.name
       fields.add(&"{f.tableName}.{fieldName}")
 
-      if f.foreignKeyColumnRef != "" and
+      if f.foreignKeyFieldRef != "" and
         f.foreignKeyRef in tableName:
-        joinPair.add(&"{f.tableName}.{fieldName}={f.foreignKeyRef}.{f.foreignKeyColumnRef}")
+        joinPair.add(&"{f.tableName}.{fieldName}={f.foreignKeyRef}.{f.foreignKeyFieldRef}")
       
 
     #discard q.select(fields, false).fromTable(tableName[0])
@@ -1147,14 +1170,11 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
             
             let dbmsFieldPragma = v.getCustomPragmaVal(dbmsField)
             dbmsFieldType.isNull = dbmsFieldPragma.isNull
-            dbmsFieldType.isPrimaryKey = dbmsFieldPragma.isPrimaryKey
-            dbmsFieldType.isUnique = dbmsFieldPragma.isUnique
             dbmsFieldType.length = dbmsFieldPragma.length.int64
             dbmsFieldType.dataType = dbmsFieldPragma.dataType
             dbmsFieldType.timeFormat = dbmsFieldPragma.timeFormat
             dbmsFieldType.dateFormat = dbmsFieldPragma.dateFormat
             dbmsFieldType.timestampFormat = dbmsFieldPragma.timestampFormat
-            dbmsFieldType.isMultipleUnique = dbmsFieldPragma.isMultipleUnique
 
             var (name, val, nodeKind) = dbmsFieldPragma.name.fieldPair(v)
             if val != "null":
@@ -1174,19 +1194,33 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
 
             dbmsFieldType.field = (name, val, nodeKind)
 
+            when v.hasCustomPragma(dbmsPrimaryKey):
+              dbmsFieldType.isPrimaryKey = true
+            
+            when v.hasCustomPragma(dbmsUniqueKey):
+              dbmsFieldType.isUnique = true
+
+            when v.hasCustomPragma(dbmsCompositeUniqueKey):
+              dbmsFieldType.uniqueKeyName = v.getCustomPragmaVal(dbmsCompositeUniqueKey)
+            
+            when v.hasCustomPragma(dbmsIndex):
+              dbmsFieldType.useIndex = true
+
+            when v.hasCustomPragma(dbmsCompositeIndex):
+              dbmsFieldType.indexName = v.getCustomPragmaVal(dbmsCompositeIndex)
+
             when v.hasCustomPragma(dbmsForeignKeyRef):
               dbmsFieldType.foreignKeyRef = v.getCustomPragmaVal(dbmsForeignKeyRef).getCustomPragmaVal(dbmsTable)
               if dbmsFieldType.foreignKeyRef == "":
                 dbmsFieldType.foreignKeyRef = ($(typeof v.getCustomPragmaVal(dbmsForeignKeyRef))).split(":")[0]
             
-            when v.hasCustomPragma(dbmsForeignKeyColumnRef):
-              dbmsFieldType.foreignKeyColumnRef = ($>v.getCustomPragmaVal(dbmsForeignKeyColumnRef)).replace(re"^(.+?)\.", "")
+            when v.hasCustomPragma(dbmsForeignKeyFieldRef):
+              dbmsFieldType.foreignKeyFieldRef = ($>v.getCustomPragmaVal(dbmsForeignKeyFieldRef)).replace(re"^(.+?)\.", "")
             
             when v.hasCustomPragma(dbmsForeignKeyConstraint):
               let pragmaConstraint = v.getCustomPragmaVal(dbmsForeignKeyConstraint)
               dbmsFieldType.foreignKeyOnUpdate = pragmaConstraint.onUpdate
               dbmsFieldType.foreignKeyOnDelete = pragmaConstraint.onDelete
-              dbmsFieldType.foreignkeyColumnRef = pragmaConstraint.columnRef
 
             fieldList.add(dbmsFieldType)
 
