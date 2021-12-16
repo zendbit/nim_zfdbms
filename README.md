@@ -70,14 +70,14 @@ type
     {.dbmsTable.} = ref object
     id*
       {.dbmsField(
-        isPrimaryKey = true,
-        dataType = SERIAL).}: Option[int64]
+        dataType = SERIAL)
+        dbmsPrimaryKey.}: Option[int64]
     email*
       {.dbmsField(
         isNull = false,
         dataType = VARCHAR,
-        isUnique = true,
-        length = 100).}: Option[string]
+        length = 100)
+        dbmsUniqueKey.}: Option[string]
     name*
       {.dbmsField(
         isNull = false,
@@ -88,18 +88,17 @@ type
     {.dbmsTable.} = ref object
     id*
       {.dbmsField(
-        isPrimaryKey = true,
-        dataType = SERIAL).}: Option[int64]
+        dataType = SERIAL)
+        dbmsPrimaryKey.}: Option[int64]
     usersId*
       {.dbmsField(
         isNull = false,
         dataType = BIGINT)
         dbmsForeignKeyRef: Users
-        dbmsForeignKeyColumnRef: Users.id
+        dbmsForeignKeyFieldRef: Users.id
         dbmsForeignKeyConstraint(
           onDelete = FK_CASCADE,
-          onUpdate = FK_CASCADE,
-          columnRef = $@Users.id).}: Option[int64]
+          onUpdate = FK_CASCADE).}: Option[int64]
     address*
       {.dbmsField(
         dataType = VARCHAR,
