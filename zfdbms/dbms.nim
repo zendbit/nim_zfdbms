@@ -1481,23 +1481,17 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
     var ok: bool
     var msg: string = "failed"
 
-    let startTransaction = dbms.exec(Sql().startTransaction)
-    ok = startTransaction.ok
-    msg = startTransaction.msg
+    when t is array or t is seq:
+      for it in t:
+        if dbms.execAffectedRows(dbms.getDbType.stmtTranslator(it, UPDATE, query)).ok:
+          affectedRows += 1
+          if msg == "":
+            msg = "ok"
+    else:
+      if dbms.execAffectedRows(dbms.getDbType.stmtTranslator(t, UPDATE, query)).ok:
+        affectedRows = 1
+        msg = "ok"
 
-    if startTransaction.ok:
-      when t is array or t is seq:
-        for it in t:
-          if dbms.execAffectedRows(dbms.getDbType.stmtTranslator(it, UPDATE, query)).ok:
-            affectedRows += 1
-      else:
-        if dbms.execAffectedRows(dbms.getDbType.stmtTranslator(t, UPDATE, query)).ok:
-          affectedRows = 1
-          msg = "ok"
-
-    let commitTransaction = dbms.exec(Sql().commitTransaction)
-    ok = commitTransaction.ok
-    msg = commitTransaction.msg
     result = (ok, affectedRows, msg)
 
   proc delete*[T](
