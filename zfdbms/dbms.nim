@@ -24,12 +24,39 @@ when WITH_SQLITE:
   import db_sqlite
 
 when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
-  import strformat, times, macros, tables, typetraits, strutils, sequtils, json, options, re
+  import
+    strformat,
+    times,
+    macros,
+    tables,
+    typetraits,
+    strutils,
+    sequtils,
+    json,
+    options,
+    re
 
-  export options, strutils, sequtils, json, strformat
+  export
+    options,
+    strutils,
+    sequtils,
+    json,
+    strformat
 
-  import stdext/[json_ext, strutils_ext, system_ext], dbs, dbssql
-  export dbs, dbssql, json_ext, strutils_ext, system_ext
+  import
+    stdext/[
+      xjson,
+      xstrutils,
+      xsystem],
+    dbs,
+    dbssql
+
+  export
+    dbs,
+    dbssql,
+    xjson,
+    xstrutils,
+    xsystem
 
   type
     DbInfo* = tuple[
@@ -112,6 +139,7 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
       INNERJOIN
       LEFTJOIN
       RIGHTJOIN
+      FULLJOIN
       CREATE_TABLE
       COUNT
 
@@ -1147,6 +1175,8 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
       discard q.leftJoin(tableName[1], joinPair)
     of RIGHTJOIN:
       discard q.rightJoin(tableName[1], joinPair)
+    of FULLJOIN:
+      discard q.fullJoin(tableName[1], joinPair)
     else:
       discard
 
@@ -1309,7 +1339,10 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
     ##    echo "table created"
     ##  echo ctbl.msg
     ##
-    result = dbms.exec(dbms.getDbType.stmtTranslator(t, CREATE_TABLE))
+    result = dbms.exec(
+      dbms.getDbType.stmtTranslator(
+        t,
+        CREATE_TABLE))
 
   proc select*[T](
     dbms: DBMS,
@@ -1326,7 +1359,12 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
     if query.stmt.len == 0:
       discard query.limit(30)
     
-    result = dbms.getRows(t, dbms.getDbType.stmtTranslator(t, SELECT, query))
+    result = dbms.getRows(
+      t,
+      dbms.getDbType.stmtTranslator(
+        t,
+        SELECT,
+        query))
 
   proc select*(
     dbms: DBMS,
@@ -1357,7 +1395,13 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
         if name == "":
           name = x.field.name
         result = &"{x.tableName}.{name}" in fields)
-    result = dbms.getRows(%dbmsField, dbms.getDbType.stmtTranslator(%dbmsField, MULTI_SELECT, query), fieldDelimiter)
+    result = dbms.getRows(
+      %dbmsField,
+      dbms.getDbType.stmtTranslator(
+        %dbmsField,
+        MULTI_SELECT,
+        query),
+      fieldDelimiter)
 
   proc selectOne*[T](
     dbms: DBMS,
@@ -1371,7 +1415,12 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
     ##    echo r.row
     ##  echo r.msg
     ##
-    result = dbms.getRow(t, dbms.getDbType.stmtTranslator(t, SELECT, query))
+    result = dbms.getRow(
+      t,
+      dbms.getDbType.stmtTranslator(
+        t,
+        SELECT,
+        query))
 
   proc selectOne*(
     dbms: DBMS,
@@ -1402,7 +1451,13 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
         if name == "":
           name = x.field.name
         result = &"{x.tableName}.{name}" in fields)
-    result = dbms.getRow(%dbmsField, dbms.getDbType.stmtTranslator(%dbmsField, MULTI_SELECT, query), fieldDelimiter)
+    result = dbms.getRow(
+      %dbmsField,
+      dbms.getDbType.stmtTranslator(
+        %dbmsField,
+        MULTI_SELECT,
+        query),
+      fieldDelimiter)
 
   proc innerJoin*[T1, T2](
     tbl1: typedesc[T1],
@@ -1512,7 +1567,10 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
     else:
       result = obj[].validatePragma()
 
-  proc toDbmsTable*[T](jnode: JsonNode, t: typedesc[T], delimiter: string = "."): T =
+  proc toDbmsTable*[T](
+    jnode: JsonNode,
+    t: typedesc[T],
+    delimiter: string = "."): T =
     let node = newJObject()
     for k, v in jnode:
       let field = k.split(".")

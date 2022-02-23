@@ -23,8 +23,14 @@ when WITH_SQLITE:
   export db_sqlite
 
 when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
-  import strformat, json, strutils, strformat, options
-  import stdext/[strutils_ext]
+  import
+    strformat,
+    json,
+    strutils,
+    strformat,
+    options
+
+  import stdext/xstrutils
 
   when WITH_MYSQL:
     type
