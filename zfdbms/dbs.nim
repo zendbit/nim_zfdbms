@@ -114,6 +114,10 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
       result = (false, nil, ex.msg)
 
   proc tryCheckConnect*[T](self: Dbs[T]): DbsResult[T] {.gcsafe.} =
+    ##
+    ## Try check connection to database
+    ## Generic T is type of MySql, PgSql, SqLite
+    ##
     try:
       var c = self.tryConnect[T]()
       if c.success:

@@ -36,17 +36,33 @@ type
     params*: seq[JsonNode]
 
 proc toQ*(self: Sql): tuple[fields: seq[string], query: SqlQuery, params: seq[JsonNode]] =
-  
+  #
+  ##  Convert Sql type into tuple
+  ##  tuple.fields is list of table fields
+  ##  tuple.query is query representation
+  ##  tuple.params is parameter passed to query
+  #
   result = (self.fields, sql self.stmt.join(" "), self.params)
 
 proc toQs*(self: Sql): tuple[fields: seq[string], query: string, params: seq[JsonNode]] =
-  
+  ##
+  ##  Convert Sql type into tuple
+  ##  tuple.fields is list of table fields
+  ##  tuple.query is string representation of query
+  ##  tuple.params is parameter passed to query
+  ##
   result = (self.fields, self.stmt.join(" "), self.params)
 
 proc `$`*(self: Sql): string =
+  ##
+  ##  Convert Sql type to string representation of query
+  ##
   result = $self.toQs
 
 proc `&`*(self: Sql, other: Sql): Sql =
+  ##
+  ##  Concat betwen two Sql type
+  ##
   if other.stmt.len != 0:
     self.stmt &= other.stmt
     self.params &= other.params
@@ -54,21 +70,35 @@ proc `&`*(self: Sql, other: Sql): Sql =
   result = self
 
 proc `&`*(prefix: string, self: Sql): Sql =
+  ##
+  ##  Concat raw query string with Sql
+  ##  as a prefix
+  ##
   self.stmt.insert(@[prefix], 0)
   
   result = self
 
 proc `&`*(self: Sql, sufix: string): Sql =
+  ##
+  ##  Concat Sql with raw query string
+  ##  as a sufix
+  ##
   self.stmt.add(sufix)
   
   result = self
 
 proc append*[T: string|Sql](self: Sql, q: T, params: varargs[JsonNode, `%`]): Sql =
+  ##
+  ##  Append sql statemen to other sql statement
+  ##
   result = self & q
   if params.len != 0:
     result.params &= params
 
 proc prepend*[T: string|Sql](self: Sql, q: T, params: varargs[JsonNode, `%`]): Sql =
+  ##
+  ##  Prepend sql statement to other sql statement
+  ##
   result = q & self
   if params.len != 0:
     result.params &= params
@@ -76,7 +106,9 @@ proc prepend*[T: string|Sql](self: Sql, q: T, params: varargs[JsonNode, `%`]): S
 proc extractFields(
   self: Sql,
   fields: openArray[string]): seq[string] =
-
+  ##
+  ##  Extract field of database table of Sql type
+  ##
   result = fields.map(proc (x: string): string =
     var field: seq[string] = @[]
     if x.contains(" AS "):
@@ -90,21 +122,27 @@ proc extractFields(
 proc dropDatabase*(
   self: Sql,
   database: string): Sql =
-
+  ##
+  ##  Drop database statement
+  ##
   self.stmt.add(&"DROP DATABASE {database}")
   result = self
 
 proc dropTable*(
   self: Sql,
   table: string): Sql =
-
+  ##
+  ##  Drop table statement
+  ##
   self.stmt.add(&"DROP TABLE {table}")
   result = self
 
 proc truncateTable*(
   self: Sql,
   table: string): Sql =
-
+  ##
+  ##  Truncate table statement
+  ##
   self.stmt.add(&"TRUNCATE TABLE {table}")
   result = self
 
@@ -113,7 +151,11 @@ proc select*(
   self: Sql,
   fields: varargs[string, `$`],
   withTablePrefix: bool = true): Sql =
-  
+  ##
+  ##  Query select statement
+  ##  fields is list of string to be selects
+  ##  witTablePrefix will append table name into fields
+  ##
   self.fields &= self.extractFields(fields)
   let mapFields = fields.map(proc (x: string): string =
     result = x
@@ -129,7 +171,12 @@ proc select*(
   fields: openArray[string],
   fieldsQuery: openArray[tuple[query: Sql, fieldAlias: string]],
   withTablePrefix: bool = true): Sql =
-  
+  ##
+  ##  Query select statement
+  ##  fields is list of string to be selects
+  ##  fieldsQuery is list of inner query from other Sql type with the fieldsAlias
+  ##  witTablePrefix will append table name into fields
+  ##
   var fieldsList: seq[string]
   if fields.len > 0:
     fieldsList = fields.map(proc (x: string): string =
@@ -154,7 +201,13 @@ proc select*(
   fields: openArray[string],
   fieldsCase: openArray[tuple[caseCond: seq[tuple[cond: string, then: JsonNode]], fieldAlias: string]],
   withTablePrefix: bool = true): Sql =
-  
+  ##
+  ##  Query select statement
+  ##  fields is list of string to be selects
+  ##  fieldsQuery is list of inner query from other Sql type with the fieldsAlias
+  ##    this will construct WHEN CASE THEN statement
+  ##  witTablePrefix will append table name into fields
+  ##
   let fields = self.fields.map(proc (x: string): string = &"{{table}}.{x}")
 
   var fieldsList: seq[string]
@@ -193,7 +246,9 @@ proc select*(
 proc fromTable*(
   self: Sql,
   table: string): Sql =
-  
+  ##
+  ##  Query from table statement (construct from table name)
+  ##
   self.fields = self.fields.map(proc (x: string): string = x.replace("{table}", table))
   self.stmt.add(&"""FROM {table}""")
   self.stmt[0] = self.stmt[0].replace("{table}", table)
@@ -202,7 +257,9 @@ proc fromTable*(
 proc fromSql*[T: string | Sql](
   self: Sql,
   query: T, params: varargs[JsonNode, `%`]): Sql =
-  
+  ##
+  ##  Query from other query statement
+  ##
   when T is string:
     self.stmt.add(&"FROM {cast[string](query)}")
   else:
@@ -221,7 +278,12 @@ proc whereCond*[T: string | Sql](
   whereType: string,
   where: T,
   params: varargs[JsonNode,`%`]): Sql =
-  
+  ##
+  ##  Raw WHERE statement
+  ##  whereType one of 'AND', 'OR'
+  ##  where is query statement can be Sql type of raw string
+  ##  params is parameter passed to where query
+  ##
   when T is string:
     self.stmt.add(&"{whereType} {cast[string](where)}")
   else:
@@ -239,42 +301,60 @@ proc where*[T: string | Sql](
   self: Sql,
   where: T,
   params: varargs[JsonNode, `%`]): Sql =
-  
+  ##
+  ##  WHERE statement without any conditions
+  ##  where is query statement can be Sql type of raw string
+  ##  params is parameter passed to where query
+  ##
   result = self.whereCond("WHERE", where, params)
 
 proc whereExists*[T: string | Sql](
   self: Sql,
   where: T,
   params: varargs[JsonNode, `%`]): Sql =
-  
+  ##
+  ##  Check WHERE EXISTS from other Sql type or raw sql string
+  ##
   result = self.whereCond("WHERE EXISTS", where, params)
 
 proc andExists*[T: string | Sql](
   self: Sql,
   where: T,
   params: varargs[JsonNode, `%`]): Sql =
-  
+  ##
+  ##  Check WHERE EXISTS from other Sql type or raw sql string
+  ##  with AND condition after call whereExists
+  ##
   result = self.whereCond("AND EXISTS", where, params)
 
 proc orExists*[T: string | Sql](
   self: Sql,
   where: T,
   params: varargs[JsonNode, `%`]): Sql =
-  
+  ##
+  ##  Check WHERE EXISTS from other Sql type or raw sql string
+  ##  with OR condition after call whereExists
+  ##
   result = self.whereCond("OR EXISTS", where, params)
 
 proc andWhere*[T: string | Sql](
   self: Sql,
   where: T,
   params: varargs[JsonNode, `%`]): Sql =
-  
+  ##
+  ##  Check WHERE from other Sql type or raw sql string
+  ##  with AND condition after call where
+  ##
   result = self.whereCond("AND", where, params)
 
 proc orWhere*[T: string | Sql](
   self: Sql,
   where: T,
   params: varargs[JsonNode, `%`]): Sql =
-  
+  ##
+  ##  Check WHERE from other Sql type or raw sql string
+  ##  with OR condition after call where
+  ##
   result = self.whereCond("OR", where, params)
 
 proc likeCond*[T](
@@ -282,7 +362,10 @@ proc likeCond*[T](
   cond: string,
   field: string,
   pattern: T): Sql =
-  
+  ##
+  ##  Check field with LIKE condition
+  ##  pattern can from other Sql type or raw string sql
+  ##
   self.stmt.add(&"{cond} {field} LIKE {pattern}")
   result = self
 
@@ -290,13 +373,19 @@ proc whereLike*[T](
   self: Sql,
   field: string,
   pattern: T): Sql =
-
+  ##
+  ##  Check field with WHERE LIKE condition
+  ##  pattern can from other Sql type or raw string sql
+  ##
   result = self.likeCond("WHERE", field, pattern)
 
 proc andLike*[T](
   self: Sql,
   field: string,
   pattern: T): Sql =
+  ##  Check field with AND LIKE condition after call whereLike
+  ##  pattern can from other Sql type or raw string sql
+  ##
   
   result = self.likeCond("AND", field, pattern)
 
@@ -304,6 +393,9 @@ proc orLike*[T](
   self: Sql,
   field: string,
   pattern: T): Sql =
+  ##  Check field with OR LIKE condition after call whereLike
+  ##  pattern can from other Sql type or raw string sql
+  ##
   
   result = self.likeCond("OR", field, pattern)
 
@@ -311,6 +403,9 @@ proc unionCond*(
   self: Sql,
   cond: string,
   unionWith: Sql): Sql =
+  ##  Union statement of two Sql type
+  ##  cond is one of "" or "All"
+  ##
 
   let q = unionwith.toQs
   self.stmt.add(&"UNION {cond} {q.query}")
@@ -322,13 +417,17 @@ proc unionCond*(
 proc union*(
   self: Sql,
   unionWith: Sql): Sql =
-
+  ##
+  ##  Union between Sql type
+  ##
   result = self.unionCond("", unionWith)
 
 proc unionAll*(
   self: Sql,
   unionWith: Sql): Sql =
-
+  ##
+  ##  Union between Sql type with All condition
+  ##
   result = self.unionCond("All", unionWith)
 
 proc whereInCond*[T: seq[JsonNode]|openArray[JsonNode]|varargs[JsonNode,`%`]|Sql](
@@ -337,7 +436,9 @@ proc whereInCond*[T: seq[JsonNode]|openArray[JsonNode]|varargs[JsonNode,`%`]|Sql
   cond: string,
   field: string,
   params: T): Sql =
-  
+  ##
+  ##  Check Sql statement if field with IN condition
+  ##
   when T isnot Sql:
     if params.len != 0:
       var inStmtParams: seq[string] = @[]
@@ -357,6 +458,9 @@ proc whereIn*[T](
   self: Sql,
   field: string,
   params: T): Sql =
+  ##
+  ##  Check Sql statement with WHERE IN condition
+  ##
   
   result = self.whereInCond("WHERE", "", field, params)
 
@@ -364,6 +468,10 @@ proc andIn*[T](
   self: Sql,
   field: string,
   params: T): Sql =
+  ##
+  ##  Check Sql statement with AND IN condition
+  ##  after call whereIn
+  ##
   
   result = self.whereInCond("AND", "", field, params)
 
@@ -371,6 +479,10 @@ proc orIn*[T](
   self: Sql,
   field: string,
   params: T): Sql =
+  ##
+  ##  Check Sql statement with OR IN condition
+  ##  after call whereIn
+  ##
   
   result = self.whereInCond("OR", "", field, params)
 
@@ -378,6 +490,10 @@ proc andNotIn*[T](
   self: Sql,
   field: string,
   params: T): Sql =
+  ##
+  ##  Check Sql statement with AND NOT IN condition
+  ##  after call whereIn
+  ##
   
   result = self.whereInCond("AND", "NOT", field, params)
 
@@ -385,6 +501,10 @@ proc orNotIn*[T](
   self: Sql,
   field: string,
   params: T): Sql =
+  ##
+  ##  Check Sql statement with OR IN condition
+  ##  after call whereIn
+  ##
   
   result = self.whereInCond("OR", "NOT", field, params)
 
@@ -394,7 +514,12 @@ proc betweenCond*(
   cond: string,
   field: string,
   param: tuple[startVal: JsonNode, endVal: JsonNode]): Sql =
-  
+  ##
+  ##  Check WHERE field BETWEEN two value
+  ##  Ex:
+  ##  startVal %10
+  ##  endVal %20
+  ##
   self.stmt.add(&"""{whereType} {field} {cond} BETWEEN {param.startVal} AND {param.endVal}""")
   result = self
 
@@ -402,6 +527,12 @@ proc whereBetween*(
   self: Sql,
   field: string,
   param: tuple[startVal: JsonNode, endVal: JsonNode]): Sql =
+  ##
+  ##  Check WHERE field BETWEEN two value
+  ##  Ex:
+  ##  startVal %10
+  ##  endVal %20
+  ##
   
   result = self.betweenCond("WHERE", "", field, param)
 
@@ -409,6 +540,13 @@ proc andBetween*(
   self: Sql,
   field: string,
   param: tuple[startVal: JsonNode, endVal: JsonNode]): Sql =
+  ##
+  ##  Check WHERE AND BETWEEN field BETWEEN two value
+  ##  after call whereBetween
+  ##  Ex:
+  ##  startVal %10
+  ##  endVal %20
+  ##
   
   result = self.betweenCond("AND", "", field, param)
 
@@ -416,6 +554,13 @@ proc orBetween*(
   self: Sql,
   field: string,
   param: tuple[startVal: JsonNode, endVal: JsonNode]): Sql =
+  ##
+  ##  Check WHERE OR BETWEEN field BETWEEN two value
+  ##  after call whereBetween
+  ##  Ex:
+  ##  startVal %10
+  ##  endVal %20
+  ##
   
   result = self.betweenCond("OR", "", field, param)
 
@@ -423,6 +568,13 @@ proc andNotBetween*(
   self: Sql,
   field: string,
   param: tuple[startVal: JsonNode, endVal: JsonNode]): Sql =
+  ##
+  ##  Check WHERE AND NOT BETWEEN field BETWEEN two value
+  ##  after call whereBetween
+  ##  Ex:
+  ##  startVal %10
+  ##  endVal %20
+  ##
   
   result = self.betweenCond("AND", "NOT", field, param)
 
@@ -430,12 +582,22 @@ proc orNotBetween*(
   self: Sql,
   field: string,
   param: tuple[startVal: JsonNode, endVal: JsonNode]): Sql =
+  ##
+  ##  Check WHERE OR BETWEEN field BETWEEN two value
+  ##  after call whereBetween
+  ##  Ex:
+  ##  startVal %10
+  ##  endVal %20
+  ##
   
   result = self.betweenCond("OR", "NOT", field, param)
 
 proc limit*(
   self: Sql,
   limit: int64): Sql =
+  ##
+  ##  LIMIT query statement
+  ##
 
   self.stmt.add(&"LIMIT {limit}")
   result = self
@@ -443,6 +605,9 @@ proc limit*(
 proc offset*(
   self: Sql,
   offset: int64): Sql =
+  ##
+  ##  OFFSET query statement
+  ##
 
   self.stmt.add(&"OFFSET {offset}")
   result = self
@@ -450,7 +615,9 @@ proc offset*(
 proc groupBy*(
   self: Sql,
   fields: varargs[string, `$`]): Sql =
-  
+  ##
+  ##  GROUB BY query statement
+  ##
   self.stmt.add(&"""GROUP BY {fields.join(", ")}""")
   result = self
 
@@ -458,19 +625,29 @@ proc orderByCond*(
   self: Sql,
   orderType: string,
   fields: varargs[string, `$`]): Sql =
-  
+  ##
+  ##  ORDER BY query statement
+  ##
   self.stmt.add(&"""ORDER BY {fields.join(", ")} {orderType}""")
   result = self
 
 proc descOrderBy*(
   self: Sql,
   fields: varargs[string, `$`]): Sql =
+  ##
+  ##  ORDER BY query statement
+  ##  descending order
+  ##
   
   result = self.orderByCond("DESC", fields)
 
 proc ascOrderBy*(
   self: Sql,
   fields: varargs[string, `$`]): Sql =
+  ##
+  ##  ORDER BY query statement
+  ##  ascending order
+  ##
   
   result = self.orderByCond("ASC", fields)
 
@@ -486,7 +663,11 @@ proc leftJoin*(
   self: Sql,
   table: string,
   joinOn: varargs[string, `$`]): Sql =
-  
+  ##
+  ##  LEFT JOIN statement
+  ##  table is table name
+  ##  joinOn is the statement table.x = table.y
+  ##
   self.stmt.add(&"""LEFT JOIN {table} ON {joinOn.join(", ")}""")
   result = self
 
@@ -494,6 +675,11 @@ proc rightJoin*(
   self: Sql,
   table: string,
   joinOn: varargs[string, `$`]): Sql =
+  ##
+  ##  RIGHT JOIN statement
+  ##  table is table name
+  ##  joinOn is the statement table.x = table.y
+  ##
   
   self.stmt.add(&"""RIGHT JOIN {table} ON {joinOn.join(", ")}""")
   result = self
@@ -502,6 +688,11 @@ proc fullJoin*(
   self: Sql,
   table: string,
   joinOn: varargs[string, `$`]): Sql =
+  ##
+  ##  LEFT FULL OUTER statement
+  ##  table is table name
+  ##  joinOn is the statement table.x = table.y
+  ##
   
   self.stmt.add(&"""FULL OUTER JOIN {table} ON {joinOn.join(", ")}""")
   result = self
@@ -510,7 +701,9 @@ proc having*(
   self: Sql,
   having: string,
   params: varargs[JsonNode, `%`]): Sql =
-  
+  ##
+  ##  HAVING statement
+  ##
   self.stmt.add(&"""HAVING {having}""")
   if params.len != 0:
     self.params &= params
@@ -521,7 +714,11 @@ proc insert*(
   self: Sql,
   table: string,
   fields: varargs[string, `$`]): Sql =
-
+  ##
+  ##  INSERT statement
+  ##  table is table name
+  ##  fields is fields of table
+  ##
   self.fields &= self.extractFields(fields)
   self.stmt.add(&"""INSERT INTO {table} ({fields.join(", ")})""")
   result = self
@@ -529,7 +726,11 @@ proc insert*(
 proc values*(
   self: Sql,
   values: varargs[seq[JsonNode]]): Sql =
-
+  ##
+  ##  multiple insert
+  ##  VALUES statement of INSERT
+  ##  after call insert
+  ##
   if self.stmt[0].contains("INSERT"):
     var insertVal: seq[string] = @[]
     for v in values:
@@ -547,6 +748,11 @@ proc values*(
 proc value*(
   self: Sql,
   values: varargs[JsonNode, `%`]): Sql =
+  ##
+  ##  single insert
+  ##  VALUES statement of INSERT
+  ##  after call insert
+  ##
 
   let stmt = self.stmt[0]
   if stmt.contains("INSERT") or stmt.contains("UPDATE"):
@@ -564,7 +770,9 @@ proc update*(
   self: Sql,
   table: string,
   fields: varargs[string, `$`]): Sql =
-
+  ##
+  ##  UPDATE query statement
+  ##
   self.fields &= self.extractFields(fields)
   let setFields = fields.map(proc (x: string): string = &"{x}=?").join(", ")
   self.stmt.add(&"""UPDATE {table} SET {setFields}""")
@@ -573,14 +781,19 @@ proc update*(
 proc delete*(
   self: Sql,
   table: string): Sql =
-
+  ##
+  ##  DELETE query statement
+  ##
   self.stmt.add(&"""DELETE FROM {table}""")
   result = self
 
 proc bracket*(
   self: Sql,
   query: Sql): Sql =
-
+  ##
+  ##  add angle bracket between Sql type
+  ##  (Sql statement)
+  ##
   let q = query.toQs
   var fixQuery = &"({q.query})"
   let fixLex = fixQuery.findAll(re"\((WHERE|OR|AND|LIKE|ILIKE|COUNT|NOT|NOT IN|AVG|SUM|MIN|MAX|CASE|HAVING|ANY|ALL)+?")
@@ -591,7 +804,9 @@ proc bracket*(
   result = self
 
 proc startTransaction*(self: Sql): Sql =
-
+  ##
+  ##  START TRANSACTION statement
+  ##
   self.stmt.add("START TRANSACTION")
 
   result = self
@@ -599,7 +814,10 @@ proc startTransaction*(self: Sql): Sql =
 proc setTransaction*(
   self: Sql,
   level: SqlTransactionLevel = READ_WRITE): Sql =
-
+  ##
+  ##  SET TRANSACTION statement
+  ##  level one of READ_WRITE, SERIALIZEABLE, REPEATABLE_READ, READ_COMMITED, READ_UNCOMMITED, READ_WRITE, READ_ONLY
+  ##
   var tlevel = ""
   case level
   of SERIALIZEABLE:
@@ -620,34 +838,72 @@ proc setTransaction*(
   result = self
 
 proc setTransactionReadOnly*(self: Sql): Sql =
+  ##
+  ##  SET TRANSACTION READ ONLY statement
+  ##
+  result = self.setTransaction(READ_ONLY)
 
-  self.stmt.add("SET TRANSACTION READ ONLY")
+proc setTransactionSerializeable*(self: Sql): Sql =
+  ##
+  ##  SET TRANSACTION SERIALIZEABLE statement
+  ##
+  result = self.setTransaction(SERIALIZEABLE)
 
-  result = self
+proc setTransactionRepeatableRead*(self: Sql): Sql =
+  ##
+  ##  SET TRANSACTION REPEATABLE READ statement
+  ##
+  result = self.setTransaction(REPEATABLE_READ)
+
+proc setTransactionReadCommited*(self: Sql): Sql =
+  ##
+  ##  SET TRANSACTION READ COMMITED statement
+  ##
+  result = self.setTransaction(READ_COMMITED)
+
+proc setTransactionReadUncommited*(self: Sql): Sql =
+  ##
+  ##  SET TRANSACTION READ UNCOMMITED statement
+  ##
+  result = self.setTransaction(READ_UNCOMMITED)
+
+proc setTransactionReadWrite*(self: Sql): Sql =
+  ##
+  ##  SET TRANSACTION READ WRITE statement
+  ##
+  result = self.setTransaction(READ_WRITE)
 
 proc savePointTransaction*(
   self: Sql,
   savePoint: string): Sql =
-
+  ##
+  ##  SAVEPOINT savepointName statement
+  ##
   self.stmt.add(&"SAVEPOINT {savePoint}")
   result = self
 
 proc savePointTransactionRelease*(
   self: Sql,
   savePoint: string): Sql =
-
+  ##
+  ##  RELEASE SAVEPOINT savepointName statement
+  ##
   self.stmt.add(&"RELEASE SAVEPOINT {savePoint}")
   result = self
 
 proc commitTransaction*(self: Sql): Sql =
-
+  ##
+  ##  COMMIT transaction statement
+  ##
   self.stmt.add("COMMIT")
   result = self
 
 proc rollbackTransaction*(
   self: Sql,
   savePoint: string = ""): Sql =
-
+  ##
+  ##  ROLLBACK TO savepointName statement
+  ##
   if savePoint != "":
     self.stmt.add(&"ROLLBACK TO {savePoint}")
   else:
@@ -658,7 +914,9 @@ proc toDbType*(
   field: string,
   nodeKind: JsonNodeKind,
   value: string): JsonNode =
-
+  ##
+  ##  convert string to JsonNode database representation
+  ##
   result = %*{field: nil}
   if value != "":
     case nodeKind
