@@ -43,7 +43,7 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
       SqLite* = db_sqlite.DbConn
   
   type
-    Dbs*[T] = ref object
+    Dbs*[T] = ref object of RootObj
       database: string
       username: string
       password: string

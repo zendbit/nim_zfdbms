@@ -1,10 +1,10 @@
 # Package
-version     = "0.0.9"
+version     = "0.0.10"
 author      = "Amru Rosyada"
 description = "Simple database generator, connector and query tools."
 license     = "BSD"
 
 # Deps
 requires "nim >= 1.4.0"
-requires "stdext >= 0.0.14"
+requires "stdext >= 0.0.15"
 

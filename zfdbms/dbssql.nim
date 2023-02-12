@@ -30,7 +30,7 @@ type
     READ_WRITE
     READ_ONLY
 
-  Sql* = ref object
+  Sql* = ref object of RootObj
     fields*: seq[string]
     stmt*: seq[string]
     params*: seq[JsonNode]

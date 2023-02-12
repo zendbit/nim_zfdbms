@@ -1,5 +1,5 @@
 # Package
-version     = "0.0.10"
+version     = "0.1.0"
 author      = "Amru Rosyada"
 description = "Simple database generator, connector and query tools."
 license     = "BSD"

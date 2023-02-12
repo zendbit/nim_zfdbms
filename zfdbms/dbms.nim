@@ -65,7 +65,7 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
       password: string,
       host: string, port: int]
 
-    DBMS*[T] = ref object
+    DBMS*[T] = ref object of RootObj
       connId*: string
       dbInfo*: DbInfo
       conn*: T
@@ -143,7 +143,7 @@ when WITH_MYSQL or WITH_PGSQL or WITH_SQLITE:
       CREATE_TABLE
       COUNT
 
-    DbmsFieldType* = ref object
+    DbmsFieldType* = ref object of RootObj
       field*: JFieldPair
       isPrimaryKey*: bool
       isNull*: bool
