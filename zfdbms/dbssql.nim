@@ -14,7 +14,7 @@ import
   strformat,
   strutils,
   json,
-  re
+  regex
 
 import
   stdext/[
@@ -798,7 +798,8 @@ proc bracket*(
   var fixQuery = &"({q.query})"
   let fixLex = fixQuery.findAll(re"\((WHERE|OR|AND|LIKE|ILIKE|COUNT|NOT|NOT IN|AVG|SUM|MIN|MAX|CASE|HAVING|ANY|ALL)+?")
   if fixLex.len != 0:
-    fixQuery = fixQuery.replace(fixLex[0], fixLex[0].replace("(", "") & "(")
+    let queryToFix = fixLex[0].groupFirstCapture(0, fixQuery)
+    fixQuery = fixQuery.replace(queryToFix, queryToFix.replace("(", "") & "(")
   self.stmt.add(fixQuery)
   self.params &= q.params
   result = self
